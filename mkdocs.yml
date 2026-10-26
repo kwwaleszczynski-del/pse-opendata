@@ -1,0 +1,57 @@
+site_name: pse-opendata
+site_description: Unofficial Python client for the public data of PSE, the Polish transmission system operator
+site_url: https://kwwaleszczynski-del.github.io/pse-opendata/
+repo_url: https://github.com/kwwaleszczynski-del/pse-opendata
+repo_name: kwwaleszczynski-del/pse-opendata
+edit_uri: ""
+copyright: Code MIT licensed. Data from PSE S.A. public reports. Not affiliated with PSE S.A.
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Light mode
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Examples: examples.md
+  - Report catalogue: reports.md
+  - Time and data pitfalls: pitfalls.md
+  - History before 2024: history.md
+  - Cache and reliability: caching.md
+  - API reference: api.md
+  - Development: development.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: false
+            show_root_heading: true
+            members_order: source
+            docstring_style: google
+            merge_init_into_class: true
