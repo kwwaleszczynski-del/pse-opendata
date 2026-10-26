@@ -96,3 +96,24 @@ def test_user_agent_names_the_package():
 
     HttpClient(Session(None)).get("https://x")
     assert seen["User-Agent"].startswith("pse-opendata/")
+
+
+def test_connection_dropped_mid_body_is_retried():
+    http, slept = make(sequence(requests.exceptions.ChunkedEncodingError("connection broken"),
+                                FakeResponse(payload={"value": []})))
+    assert http.get("https://x", decode=lambda r: r.json()) == {"value": []}
+    assert slept == [2.0]
+
+
+@pytest.mark.parametrize("status", [501, 520])
+def test_every_server_error_is_retried(status):
+    http, slept = make(sequence(FakeResponse(status), FakeResponse(payload={})))
+    http.get("https://x")
+    assert slept == [2.0]
+
+
+def test_other_request_errors_are_wrapped_without_retry():
+    http, slept = make(lambda u, p: requests.exceptions.InvalidURL("bad url"))
+    with pytest.raises(PseApiError, match="bad url"):
+        http.get("https://x")
+    assert slept == []

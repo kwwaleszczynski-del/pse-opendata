@@ -20,7 +20,7 @@ rce.head(3)
 
 2,976 rows (31 days of 96 quarter-hours). `end` is optional; `pse.rce("2025-01-01")` returns one day. Dates are
 business days in Polish local time, inclusive, given as `"YYYY-MM-DD"`, `datetime.date`, `datetime` or
-`pandas.Timestamp`.
+`pandas.Timestamp`; a time zone-aware value is converted to Polish time first.
 
 ## Selected fields
 
@@ -110,11 +110,13 @@ rows = pse.Client().records("rcco2", filter="business_date ge '2025-01-01' and b
 ```bash
 pse-opendata get rce-pln --start 2025-01-01 --end 2025-01-31 --out rce.parquet
 pse-opendata get his-wlk-cal --start 2025-06-01 --end 2025-06-30 --fields demand,wi,pv --out mix.csv
-pse-opendata get crb-rozl --start 2025-07-01 --end 2025-07-31 --dropna > cen.csv
+pse-opendata get crb-rozl --start 2025-07-01 --end 2025-07-31 --dropna --out cen.csv
 pse-opendata legacy PL_CENY_RYN_EN --start 2023-10-01 --end 2023-10-31 --out rce_2023_10.parquet
 pse-opendata history demand --start 2024-01-01 --end 2024-12-31 --out demand.parquet
 pse-opendata reports --markdown
 pse-opendata cache
 ```
 
-Common options: `--cache-dir`, `--no-cache`, `--refresh`, `--offline`, `--allow-stale`, `-v` (log requests).
+Without `--out` the table goes to standard output as UTF-8 CSV; prefer `--out` for files (Windows PowerShell 5.1
+re-encodes redirected output). Common options: `--cache-dir`, `--no-cache`, `--refresh`, `--offline`,
+`--allow-stale`, `-v` (log requests).

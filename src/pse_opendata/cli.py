@@ -35,7 +35,7 @@ log = logging.getLogger("pse_opendata")
 def _write(frame: pd.DataFrame, out: Path | None) -> None:
     if out is None:
         try:
-            frame.to_csv(sys.stdout, index=False)
+            frame.to_csv(sys.stdout, index=False, lineterminator="\n")    # text stdout adds \r on Windows
             sys.stdout.flush()
         except (BrokenPipeError, OSError):    # e.g. piped into `head`
             os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())

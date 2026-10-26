@@ -29,6 +29,7 @@ import pyarrow.parquet as pq
 from pse_opendata._version import __version__
 
 META_KEY = b"pse_opendata"
+SOURCES = ("api", "legacy")
 DATETIME_COLUMNS = ["start_utc", "end_utc", "start_local", "end_local"]
 
 
@@ -67,18 +68,16 @@ class MonthCache:
         try:
             table = pq.read_table(path)
             meta = json.loads((table.schema.metadata or {})[META_KEY])
+            fetched_utc = datetime.fromisoformat(meta["fetched_utc"])
+            first_day = date.fromisoformat(meta["first_day"])
+            last_day = date.fromisoformat(meta["last_day"])
             frame = table.to_pandas()
-        except (OSError, KeyError, ValueError, pa.ArrowException):
+        except (OSError, KeyError, TypeError, ValueError, pa.ArrowException):
             return None
         for col in DATETIME_COLUMNS:
             if col in frame:
                 frame[col] = frame[col].dt.as_unit("ns")
-        return CachedMonth(
-            frame=frame,
-            fetched_utc=datetime.fromisoformat(meta["fetched_utc"]),
-            first_day=date.fromisoformat(meta["first_day"]),
-            last_day=date.fromisoformat(meta["last_day"]),
-        )
+        return CachedMonth(frame=frame, fetched_utc=fetched_utc, first_day=first_day, last_day=last_day)
 
     def write(self, source: str, report: str, month: date, frame: pd.DataFrame, *, fetched_utc: datetime,
               first_day: date, last_day: date) -> Path:
@@ -95,13 +94,15 @@ class MonthCache:
         return path
 
     def clear(self, source: str | None = None, report: str | None = None) -> int:
-        """Delete cached files (all, one source, or one report of a source); returns how many were deleted."""
-        base = self.root
-        if source:
-            base = base / source
-            if report:
-                base = base / report
-        files = list(base.rglob("*.parquet")) if base.exists() else []
+        """Delete cached files (all, one source, or one report of a source); returns how many were deleted.
+
+        Only the ``api`` and ``legacy`` sub-folders are touched, so other files in the directory are safe.
+        """
+        sources = [source] if source else list(SOURCES)
+        files = []
+        for src in sources:
+            base = self.root / src / report if report else self.root / src
+            files += [f for f in base.glob("**/*.parquet") if f.is_file()] if base.exists() else []
         for f in files:
             f.unlink()
         return len(files)

@@ -15,7 +15,9 @@ from pse_opendata.exceptions import PseApiError, PseError
 log = logging.getLogger("pse_opendata")
 
 USER_AGENT = f"pse-opendata/{__version__} (+https://github.com/kwwaleszczynski-del/pse-opendata)"
-RETRY_STATUS = {429, 500, 502, 503, 504}
+# network failures worth another attempt; other RequestException subclasses (bad URL, ...) are raised at once
+RETRY_ERRORS = (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError,
+                requests.exceptions.ContentDecodingError)
 T = TypeVar("T")
 
 
@@ -37,7 +39,7 @@ def _error_message(response: requests.Response) -> tuple[str, str | None]:
 
 
 class HttpClient:
-    """GET requests with retries on network errors, HTTP 429 and 5xx.
+    """GET requests with retries on network errors (also a connection dropped mid-body), HTTP 429 and 5xx.
 
     Waits ``backoff * 2**attempt`` seconds (at most ``max_backoff``) between attempts, or what ``Retry-After`` asks
     for. ``min_interval`` is the pause between the end of one request and the start of the next one.
@@ -96,8 +98,10 @@ class HttpClient:
             try:
                 response = self.session.get(url, params=params, timeout=self.timeout,
                                             headers={"User-Agent": self.user_agent})
-            except (requests.ConnectionError, requests.Timeout) as e:
+            except RETRY_ERRORS as e:
                 last_error = PseApiError(f"request failed: {e}", url=url)
+            except requests.RequestException as e:
+                raise PseApiError(f"request failed: {e}", url=url) from e
             finally:
                 self._last_done = self._clock()
             if response is not None:
@@ -105,7 +109,7 @@ class HttpClient:
                 if status >= 400:
                     message, code = _error_message(response)
                     last_error = PseApiError(f"HTTP {status} from {url}: {message}", status=status, code=code, url=url)
-                    if status not in RETRY_STATUS:
+                    if status != 429 and status < 500:
                         raise last_error
                 else:
                     try:

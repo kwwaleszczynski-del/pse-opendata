@@ -39,7 +39,8 @@ python scripts/gen_docs.py
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs ruff, mypy and the offline tests on Python 3.11, 3.12 and 3.13, builds the wheel and
+`.github/workflows/ci.yml` runs ruff, mypy and the offline tests on Python 3.11, 3.12 and 3.13 (plus the oldest
+supported pandas 2.1, pyarrow 14 and requests 2.31), builds the wheel and
 the documentation. `.github/workflows/docs.yml` publishes the documentation to GitHub Pages from `main`.
 
 ## Releasing

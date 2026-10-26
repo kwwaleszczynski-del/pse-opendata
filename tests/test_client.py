@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 import pse_opendata as pse
+from pse_opendata import client as pse_client
 from pse_opendata.exceptions import CacheMissError, PseApiError, UnknownFieldError, UnknownReportError
 
 from conftest import (
@@ -236,3 +237,27 @@ def test_cached_file_without_a_catalogue_field(make_client, tmp_path):
     assert len(session.calls) == 1
     offline, _ = make_client(lambda u, p: FakeResponse(500), offline=True)
     assert offline.rce("2025-01-02")["rce_pln"].isna().all()                 # offline: kept, empty column
+
+
+def test_time_zone_aware_dates_are_polish_business_days():
+    assert pse_client.to_date(datetime(2025, 3, 1, 23, 30, tzinfo=UTC)) == date(2025, 3, 2)
+    assert pse_client.to_date(pd.Timestamp("2025-03-01 22:59", tz="UTC")) == date(2025, 3, 1)
+    assert pse_client.to_date("2025-03-01T23:30+00:00") == date(2025, 3, 2)
+    assert pse_client.to_date(datetime(2025, 3, 1, 23, 30)) == date(2025, 3, 1)      # naive: taken as is
+
+
+def test_empty_months_are_not_cached(make_client, tmp_path):
+    client, session = make_client(lambda u, p: FakeResponse(payload={"value": []}))
+    assert client.rce("2025-01-01", "2025-01-31").empty
+    assert not (tmp_path / "cache" / "api" / "rce-pln").exists()
+
+
+def test_cache_write_errors_do_not_lose_the_download(make_client, monkeypatch, caplog):
+    client, _ = make_client(serve_records(JAN_2025))
+
+    def fail(*args, **kwargs):
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(client.cache, "write", fail)
+    assert len(client.rce("2025-01-01", "2025-01-31")) == 31 * 96
+    assert "could not write the cache" in caplog.text

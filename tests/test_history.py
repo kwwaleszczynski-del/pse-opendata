@@ -85,3 +85,14 @@ def test_unknown_series(make_client):
     client, _ = make_client(handler([]), cache=False)
     with pytest.raises(ValueError, match="available"):
         client.history("prices", "2024-06-01")
+
+
+def test_rescale_window_is_cached_as_whole_months(make_client):
+    calls: list[str] = []
+    client, _ = make_client(handler(calls))
+    client.history("demand", "2024-06-20", "2024-06-21", rescale=True)
+    assert any("data_od/20240501/data_do/20240531" in c for c in calls)
+    assert any("data_od/20240601/data_do/20240613" in c for c in calls)
+    calls.clear()
+    client.history("demand", "2024-06-20", "2024-06-21", rescale=True)
+    assert calls == []                                     # legacy months are final; June 2024 API month is final

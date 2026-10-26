@@ -31,6 +31,17 @@ jobs:
       - run: pytest -q
       - run: python scripts/gen_docs.py --check
 
+  oldest:
+    # the lowest versions declared in pyproject.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install "pandas==2.1.4" "numpy<2" "pyarrow==14.0.2" "requests==2.31.0" pytest -e .
+      - run: pytest -q
+
   build:
     runs-on: ubuntu-latest
     steps:

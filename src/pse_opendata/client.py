@@ -29,8 +29,8 @@ from pse_opendata.catalog import (
     get_legacy_report,
     get_report,
 )
-from pse_opendata.exceptions import CacheMissError, PseApiError, UnknownFieldError
-from pse_opendata.frames import TIME_COLUMNS, empty_frame, parse_records, tidy, to_hourly
+from pse_opendata.exceptions import CacheMissError, PseApiError, PseError, UnknownFieldError
+from pse_opendata.frames import TIME_COLUMNS, TZ, empty_frame, parse_records, tidy, to_hourly
 from pse_opendata.legacy_csv import fetch_legacy
 from pse_opendata.stitch import SEAM, SERIES, clamp, splice_factor
 
@@ -43,12 +43,17 @@ _DEFAULT: Any = object()
 
 
 def to_date(value: DateLike) -> date:
-    """A business date from a ``date``, ``datetime``, ``pandas.Timestamp`` or ISO string; times are ignored."""
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, date):
+    """A business date from a ``date``, ``datetime``, ``pandas.Timestamp`` or ISO string.
+
+    The time of day is ignored; a time zone-aware value is first converted to Polish time, so
+    ``2025-03-01 23:30 UTC`` is business date 2025-03-02.
+    """
+    if isinstance(value, date) and not isinstance(value, datetime):
         return value
-    return pd.Timestamp(value).date()
+    stamp = pd.Timestamp(value)
+    if stamp.tzinfo is not None:
+        stamp = stamp.tz_convert(TZ)
+    return stamp.date()
 
 
 def months(start: date, end: date) -> Iterator[tuple[date, date]]:
@@ -238,15 +243,19 @@ class Client:
             fetched_utc = self._now()
             try:
                 frame = fetch(first, last) if whole else fetch(lo, hi)
-            except PseApiError as e:
+            except PseError as e:
                 if self.allow_stale and cached is not None:
                     log.warning("%s %s %s: download failed (%s); using the copy cached on %s", source, name,
                                 f"{first:%Y-%m}", e, f"{cached.fetched_utc:%Y-%m-%d %H:%M}")
                     frames.append(_between(cached.frame, lo, hi))
                     continue
                 raise
-            if whole and self.cache is not None:
-                self.cache.write(source, name, first, frame, fetched_utc=fetched_utc, first_day=first, last_day=last)
+            if whole and self.cache is not None and len(frame):     # an empty month is never stored as final
+                try:
+                    self.cache.write(source, name, first, frame, fetched_utc=fetched_utc, first_day=first,
+                                     last_day=last)
+                except OSError as e:
+                    log.warning("%s %s %s: could not write the cache (%s)", source, name, f"{first:%Y-%m}", e)
             frames.append(_between(frame, lo, hi))
         return frames
 
@@ -344,9 +353,9 @@ class Client:
         new = self._api_part(spec.report, spec.field, lo, hi)
         factor = 1.0
         if rescale and len(new):
-            seam = SEAM.date()
-            before = self._legacy_part(spec.legacy_code, spec.legacy_field, seam - timedelta(days=15), seam)
-            after = self._api_part(spec.report, spec.field, seam, seam + timedelta(days=14))
+            # whole months around the seam (cached once); splice_factor uses the 14 days either side
+            before = self._legacy_part(spec.legacy_code, spec.legacy_field, date(2024, 5, 1), LEGACY_END)
+            after = self._api_part(spec.report, spec.field, API_START, date(2024, 6, 30))
             factor = splice_factor(before.set_index("start_utc")["value"], after.set_index("start_utc")["value"])
             new = new.assign(value=new["value"] * factor)
             log.info("%s: API part rescaled by %.4f", series, factor)
