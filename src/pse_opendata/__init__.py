@@ -19,7 +19,7 @@ import pandas as pd
 
 from pse_opendata._version import __version__
 from pse_opendata.catalog import LEGACY_REPORTS, REPORTS, Field, LegacyReport, Report, get_legacy_report, get_report
-from pse_opendata.client import Client, DateLike
+from pse_opendata.client import Client, DateLike, MonthLoad
 from pse_opendata.exceptions import (
     CacheMissError,
     LegacyFormatError,
@@ -35,9 +35,9 @@ logging.getLogger("pse_opendata").addHandler(logging.NullHandler())
 
 __all__ = [
     "LEGACY_REPORTS", "REPORTS", "TIME_COLUMNS", "CacheMissError", "Client", "Field", "LegacyFormatError",
-    "LegacyReport", "PseApiError", "PseError", "Report", "UnknownFieldError", "UnknownReportError", "__version__",
-    "balancing_capacity", "default_client", "fundamentals", "get", "get_legacy_report", "get_report", "history",
-    "imbalance_prices", "legacy", "rce", "reports", "sdac", "splice_factor", "to_hourly",
+    "LegacyReport", "MonthLoad", "PseApiError", "PseError", "Report", "UnknownFieldError", "UnknownReportError",
+    "__version__", "balancing_capacity", "default_client", "fundamentals", "get", "get_legacy_report", "get_report",
+    "history", "imbalance_prices", "legacy", "rce", "reports", "sdac", "splice_factor", "to_hourly",
 ]
 
 _default: Client | None = None

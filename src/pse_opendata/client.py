@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, TypeAlias
@@ -70,6 +71,23 @@ def _between(frame: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
     return frame[keep.to_numpy()]
 
 
+@dataclass(frozen=True)
+class MonthLoad:
+    """How one calendar month of one report was loaded; see :attr:`Client.loads`.
+
+    ``status`` is ``"cached"`` (a final or offline copy from the cache), ``"downloaded"`` or ``"stale"`` (the
+    download failed and ``allow_stale`` used the cached copy). ``fetched_utc`` is when the data were downloaded
+    (for cached and stale months, when the cached copy was). ``rows`` counts the rows of the requested days.
+    """
+
+    source: Literal["api", "legacy"]
+    name: str
+    month: date
+    status: Literal["cached", "downloaded", "stale"]
+    fetched_utc: datetime
+    rows: int
+
+
 def _concat(frames: list[pd.DataFrame], fields: Sequence[Field], key: Sequence[str] = (),
             dedupe: bool = True) -> pd.DataFrame:
     frames = [f for f in frames if len(f)]
@@ -97,6 +115,11 @@ class Client:
         session: a ``requests.Session`` to use (e.g. with a proxy); also how tests replay recorded responses.
         now: function returning the current time (UTC), for tests.
         sleep: replacement for ``time.sleep``, for tests.
+
+    Attributes:
+        loads: one :class:`MonthLoad` per month loaded so far, in order (cached, downloaded or stale), e.g. to show
+            how fresh the data are; a month that could not be loaded raises instead. Clear it with
+            ``client.loads.clear()``.
     """
 
     def __init__(
@@ -124,6 +147,7 @@ class Client:
         self.allow_stale = allow_stale
         self.revision_days = revision_days
         self.page_size = page_size
+        self.loads: list[MonthLoad] = []
         self._now = now or (lambda: datetime.now(UTC))
         session = session if session is not None else requests.Session()
         sleep = sleep or time.sleep
@@ -216,7 +240,7 @@ class Client:
         return CachedMonth(cached.frame.assign(**{c: float("nan") for c in missing}), cached.fetched_utc,
                            cached.first_day, cached.last_day)
 
-    def _monthly(self, source: str, name: str, start: date, end: date,
+    def _monthly(self, source: Literal["api", "legacy"], name: str, start: date, end: date,
                  fetch: Callable[[date, date], pd.DataFrame], revision_days: int | None,
                  available: tuple[date, date | None], columns: Sequence[str]) -> list[pd.DataFrame]:
         """Load ``start``..``end`` month by month through the cache.
@@ -229,35 +253,44 @@ class Client:
         frames = []
         for first, last in months(start, end):
             lo, hi = max(start, first), min(end, last)
-            whole = lo == max(first, available[0]) and hi == min(last, available[1] or last)
-            cached = self._read_cache(source, name, first, columns)
-            if self.offline:
-                if cached is None:
-                    where = self.cache.root if self.cache is not None else "(cache disabled)"
-                    raise CacheMissError(f"{source}/{name} {first:%Y-%m} is not in the cache {where}")
-                frames.append(_between(cached.frame, lo, hi))
-                continue
-            if cached is not None and not self.refresh and self._final(cached, last, revision_days):
-                frames.append(_between(cached.frame, lo, hi))
-                continue
-            fetched_utc = self._now()
-            try:
-                frame = fetch(first, last) if whole else fetch(lo, hi)
-            except PseError as e:
-                if self.allow_stale and cached is not None:
-                    log.warning("%s %s %s: download failed (%s); using the copy cached on %s", source, name,
-                                f"{first:%Y-%m}", e, f"{cached.fetched_utc:%Y-%m-%d %H:%M}")
-                    frames.append(_between(cached.frame, lo, hi))
-                    continue
-                raise
-            if whole and self.cache is not None and len(frame):     # an empty month is never stored as final
-                try:
-                    self.cache.write(source, name, first, frame, fetched_utc=fetched_utc, first_day=first,
-                                     last_day=last)
-                except OSError as e:
-                    log.warning("%s %s %s: could not write the cache (%s)", source, name, f"{first:%Y-%m}", e)
-            frames.append(_between(frame, lo, hi))
+            frame, status, fetched_utc = self._month(source, name, first, last, lo, hi, fetch, revision_days,
+                                                     available, columns)
+            part = _between(frame, lo, hi)
+            frames.append(part)
+            self.loads.append(MonthLoad(source, name, first, status, fetched_utc, len(part)))
         return frames
+
+    def _month(self, source: Literal["api", "legacy"], name: str, first: date, last: date, lo: date, hi: date,
+               fetch: Callable[[date, date], pd.DataFrame], revision_days: int | None,
+               available: tuple[date, date | None], columns: Sequence[str],
+               ) -> tuple[pd.DataFrame, Literal["cached", "downloaded", "stale"], datetime]:
+        """One month of :meth:`_monthly`: the frame (possibly wider than ``lo``..``hi``), how it was loaded and when
+        it was downloaded."""
+        whole = lo == max(first, available[0]) and hi == min(last, available[1] or last)
+        cached = self._read_cache(source, name, first, columns)
+        if self.offline:
+            if cached is None:
+                where = self.cache.root if self.cache is not None else "(cache disabled)"
+                raise CacheMissError(f"{source}/{name} {first:%Y-%m} is not in the cache {where}")
+            return cached.frame, "cached", cached.fetched_utc
+        if cached is not None and not self.refresh and self._final(cached, last, revision_days):
+            return cached.frame, "cached", cached.fetched_utc
+        fetched_utc = self._now()
+        try:
+            frame = fetch(first, last) if whole else fetch(lo, hi)
+        except PseError as e:
+            if self.allow_stale and cached is not None:
+                log.warning("%s %s %s: download failed (%s); using the copy cached on %s", source, name,
+                            f"{first:%Y-%m}", e, f"{cached.fetched_utc:%Y-%m-%d %H:%M}")
+                return cached.frame, "stale", cached.fetched_utc
+            raise
+        if whole and self.cache is not None and len(frame):     # an empty month is never stored as final
+            try:
+                self.cache.write(source, name, first, frame, fetched_utc=fetched_utc, first_day=first,
+                                 last_day=last)
+            except OSError as e:
+                log.warning("%s %s %s: could not write the cache (%s)", source, name, f"{first:%Y-%m}", e)
+        return frame, "downloaded", fetched_utc
 
     def _final(self, cached: CachedMonth, last_day: date, revision_days: int | None) -> bool:
         if revision_days is None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from pse_opendata import Client, cli
+from pse_opendata import Client, __version__, cli
 
 from conftest import FakeSession, api_pages, serve_pages
 
@@ -69,4 +69,4 @@ def test_cache_command(fake_client, tmp_path, capsys):
 def test_version(capsys):
     with pytest.raises(SystemExit):
         cli.main(["--version"])
-    assert capsys.readouterr().out.startswith("pse-opendata 0.1.0")
+    assert capsys.readouterr().out.startswith(f"pse-opendata {__version__}")

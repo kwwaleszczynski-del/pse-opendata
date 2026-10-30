@@ -143,6 +143,32 @@ def test_stale_copy_is_used_only_when_allowed(make_client):
     assert len(stale.rce("2025-01-01", "2025-01-31")) == 31 * 96
 
 
+def test_loads_record_how_each_month_was_loaded(make_client):
+    records = {"rce-pln": records_for("rce_pln", date(2024, 12, 1), date(2025, 2, 28))}
+    downloaded = datetime(2025, 3, 10, tzinfo=UTC)
+    client, _ = make_client(serve_records(records), now=Clock(downloaded))
+    client.rce("2024-12-01", "2025-01-31")
+    client.rce("2025-01-30", "2025-02-02")                    # January final in the cache, February downloaded
+    assert [(m.month, m.status, m.rows) for m in client.loads] == [
+        (date(2024, 12, 1), "downloaded", 31 * 96), (date(2025, 1, 1), "downloaded", 31 * 96),
+        (date(2025, 1, 1), "cached", 2 * 96), (date(2025, 2, 1), "downloaded", 2 * 96)]
+    assert all(m.source == "api" and m.name == "rce-pln" and m.fetched_utc == downloaded for m in client.loads)
+
+    later = datetime(2025, 3, 20, tzinfo=UTC)
+    stale, _ = make_client(lambda u, p: FakeResponse(503), retries=1, allow_stale=True, refresh=True,
+                           now=Clock(later))
+    stale.rce("2025-01-01", "2025-01-31")
+    assert [(m.status, m.fetched_utc) for m in stale.loads] == [("stale", downloaded)]
+    offline, _ = make_client(lambda u, p: FakeResponse(500), offline=True)
+    offline.rce("2024-12-24")
+    assert [(m.month, m.status, m.rows) for m in offline.loads] == [(date(2024, 12, 1), "cached", 96)]
+    with pytest.raises(CacheMissError):
+        offline.rce("2025-03-01")
+    assert len(offline.loads) == 1                              # a month that fails is not recorded
+    offline.loads.clear()
+    assert offline.loads == []
+
+
 def test_refresh_downloads_final_months_again(make_client):
     client, session = make_client(serve_records(JAN_2025))
     client.rce("2025-01-01", "2025-01-31")

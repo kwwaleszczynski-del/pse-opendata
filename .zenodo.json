@@ -1,0 +1,36 @@
+{
+  "title": "pse-opendata: Python client for the public data of PSE, the Polish transmission system operator",
+  "upload_type": "software",
+  "description": "<p>An unofficial Python client for the public data of PSE S.A., the Polish transmission system operator: the reports API (market prices RCE and SDAC, demand and generation, the balancing market, cross-border flows and redispatch of renewables) and the legacy CSV export with the history before June 2024. It returns tidy pandas frames with explicit interval start and end times in UTC and Polish local time, caches monthly Parquet files with per-report revision windows and handles the pitfalls of the sources: interval-end time stamps, daylight saving days, hourly products repeated in quarter-hours, republished settlement data, rate limits and keyset paging that skips repeated balancing capacity offers.</p><p>Not affiliated with PSE S.A. The package does not redistribute PSE data. Documentation: https://kwwaleszczynski-del.github.io/pse-opendata/</p>",
+  "creators": [
+    {
+      "name": "Waleszczyński, Konrad"
+    }
+  ],
+  "license": "MIT",
+  "access_right": "open",
+  "keywords": [
+    "electricity market",
+    "power system",
+    "open data",
+    "Poland",
+    "PSE",
+    "transmission system operator",
+    "balancing market",
+    "day-ahead prices",
+    "renewable energy",
+    "pandas"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://kwwaleszczynski-del.github.io/pse-opendata/",
+      "relation": "isDocumentedBy",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://pypi.org/project/pse-opendata/",
+      "relation": "isIdenticalTo",
+      "scheme": "url"
+    }
+  ]
+}

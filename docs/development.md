@@ -52,4 +52,8 @@ until the repository variable `PYPI_PUBLISH` is set to `true`. To enable it:
 1. On PyPI, add a pending trusted publisher for project `pse-opendata`: owner `kwwaleszczynski-del`, repository
    `pse-opendata`, workflow `release.yml`, environment `pypi`.
 2. In the GitHub repository, create the environment `pypi` and set the variable `PYPI_PUBLISH=true`.
-3. Update the version in `src/pse_opendata/_version.py` and `CHANGELOG.md`, tag `vX.Y.Z` and publish a release.
+3. Update the version in `src/pse_opendata/_version.py`, `CHANGELOG.md` and `CITATION.cff`, tag `vX.Y.Z` and
+   publish a GitHub release.
+
+The Zenodo GitHub integration archives every published release and gives it a DOI (metadata in `.zenodo.json`); the
+concept DOI, which always resolves to the latest version, is in the README and `CITATION.cff`.

@@ -2,6 +2,8 @@
 
 [![tests](https://github.com/kwwaleszczynski-del/pse-opendata/actions/workflows/ci.yml/badge.svg)](https://github.com/kwwaleszczynski-del/pse-opendata/actions/workflows/ci.yml)
 [![docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://kwwaleszczynski-del.github.io/pse-opendata/)
+[![PyPI](https://img.shields.io/pypi/v/pse-opendata.svg)](https://pypi.org/project/pse-opendata/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Unofficial Python client for the public data of **PSE S.A.**, the Polish transmission system operator: market
 prices (RCE, SDAC), demand and generation, the balancing market (imbalance prices, balancing capacity, offers),
@@ -30,10 +32,10 @@ analysis project. Details: [time and data pitfalls](https://kwwaleszczynski-del.
 
 ## Install
 
-Python 3.11 or newer. The package is not on PyPI yet; install it from GitHub:
+Python 3.11 or newer:
 
 ```bash
-pip install "pse-opendata @ git+https://github.com/kwwaleszczynski-del/pse-opendata"
+pip install pse-opendata
 ```
 
 ## Quick start
@@ -143,6 +145,10 @@ ruff check .
 mypy
 mkdocs build --strict
 ```
+
+## Citation
+
+If you use the package in published work, please cite it; see [`CITATION.cff`](CITATION.cff).
 
 ## License
 

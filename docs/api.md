@@ -30,6 +30,8 @@ The functions below use a shared default client; pass `client=pse.Client(...)` t
 
 ::: pse_opendata.Client
 
+::: pse_opendata.MonthLoad
+
 ## Catalogue
 
 ::: pse_opendata.catalog.Report

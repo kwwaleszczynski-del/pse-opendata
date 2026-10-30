@@ -3,13 +3,16 @@
 Python 3.11 or newer. Dependencies: `pandas` (2.1 or newer, pandas 3 supported), `pyarrow` (Parquet cache) and
 `requests`.
 
-The package is not on PyPI yet. Install it from GitHub:
+Install it from [PyPI](https://pypi.org/project/pse-opendata/):
 
 ```bash
-pip install "pse-opendata @ git+https://github.com/kwwaleszczynski-del/pse-opendata"
+pip install pse-opendata
 ```
 
-or from a clone, in a virtual environment:
+The version follows [semantic versioning](https://semver.org/); while it is below 1.0, a new minor version (0.x) may
+change the interface, so pin it in projects, e.g. `pse-opendata>=0.2,<0.3`.
+
+To work on the code, install it from a clone, in a virtual environment:
 
 ```bash
 git clone https://github.com/kwwaleszczynski-del/pse-opendata

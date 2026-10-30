@@ -21,6 +21,23 @@ those days. Legacy months are always final. Empty months are never stored.
 Each file stores the download time in its Parquet metadata, so copying the cache (e.g. between CI runs) keeps the
 right state. Writes are atomic.
 
+## What was loaded
+
+`client.loads` lists, for every month loaded so far, whether it came from the cache, was downloaded or was a stale
+cached copy used after a failed download, and when its data were downloaded. Dashboards can show it as data
+freshness:
+
+```python
+client = pse.Client(cache_dir="data/pse", allow_stale=True)
+prices = client.rce("2025-01-01", "2025-03-31")
+for m in client.loads:            # MonthLoad(source, name, month, status, fetched_utc, rows)
+    print(m.name, f"{m.month:%Y-%m}", m.status, f"{m.fetched_utc:%Y-%m-%d %H:%M}", m.rows)
+client.loads.clear()
+```
+
+A month that cannot be loaded at all (download failed and no cached copy, or offline without one) raises an
+exception and is not listed.
+
 ```python
 import pse_opendata as pse
 
