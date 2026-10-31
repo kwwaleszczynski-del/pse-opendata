@@ -3,6 +3,7 @@
 [![tests](https://github.com/kwwaleszczynski-del/pse-opendata/actions/workflows/ci.yml/badge.svg)](https://github.com/kwwaleszczynski-del/pse-opendata/actions/workflows/ci.yml)
 [![docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://kwwaleszczynski-del.github.io/pse-opendata/)
 [![PyPI](https://img.shields.io/pypi/v/pse-opendata.svg)](https://pypi.org/project/pse-opendata/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23833548.svg)](https://doi.org/10.5281/zenodo.23833548)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Unofficial Python client for the public data of **PSE S.A.**, the Polish transmission system operator: market
@@ -148,7 +149,10 @@ mkdocs build --strict
 
 ## Citation
 
-If you use the package in published work, please cite it; see [`CITATION.cff`](CITATION.cff).
+If you use the package in published work, please cite it through its Zenodo DOI,
+[10.5281/zenodo.23833548](https://doi.org/10.5281/zenodo.23833548) (all versions; each release also has its own DOI,
+e.g. 0.2.0: [10.5281/zenodo.23833549](https://doi.org/10.5281/zenodo.23833549)). See also
+[`CITATION.cff`](CITATION.cff).
 
 ## License
 
