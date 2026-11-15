@@ -58,6 +58,10 @@ class Report:
     ``revision_days``: PSE republishes some reports after corrections; this is how many days after the end of a
     month the data may still change (latest republication observed for Sep 2025 - Oct 2026, rounded up). The cache
     treats a month as final only when it was downloaded at least this long after the month ended.
+    ``republication_check``: how the client asks PSE whether a final cached month was republished later (e.g. the
+    bulk republication of 2024-2025 data on 2026-01-18/19): ``"span"`` one request for all cached months of a call
+    (then one per month only if something is newer), ``"month"`` one request per cached month (reports the server
+    cannot sort over a long range), ``"none"`` no check (the server cannot answer it).
     """
 
     name: str
@@ -72,6 +76,7 @@ class Report:
     unique_key: bool = True
     notes: tuple[str, ...] = ()
     revision_days: int = 3
+    republication_check: Literal["span", "month", "none"] = "span"
     time_field: str = "dtime_utc"
 
     @property
@@ -283,6 +288,7 @@ _add(Report(
     first_date=API_START,
     key=("reserve_type", "com", "pom", "comrr"),
     unique_key=False,
+    republication_check="none",
     description="Anonymous portfolio offers of the primary balancing capacity procurement; many rows per hour.",
     notes=(
         "reserve_type uses the modifier letters U+1D33 (ᴳ, up) and U+1D30 (ᴰ, down), as published.",
@@ -416,14 +422,25 @@ _add(Report(
     group="system",
     resolution="15min",
     fields=(
-        Field("section_code", "Cross-section, e.g. 'CZ-PL'", dtype="str"),
-        Field("value", "Physical power flow on the cross-section; + = import to Poland, - = export", "MW"),
+        Field("section_code", "Directional section: 'X-PL' (flow from country X into Poland) or 'PL-X' (flow from "
+                              "Poland to X)", dtype="str"),
+        Field("value", "Flow in the direction of the section: >= 0 on 'X-PL' (import), <= 0 on 'PL-X' (export); "
+                       "the net flow with X is the sum of both rows", "MW"),
     ),
     first_date=API_START,
     key=("section_code",),
-    description="Physical flows on the commercial cross-sections, one row per section and interval.",
+    description="Physical flows on the commercial cross-sections, two directional rows per border and interval.",
     revision_days=60,
-    notes=("Flows exclude local exchange over 110 kV lines (comment on the report page).",),
+    notes=(
+        "Each border has two rows per interval, 'X-PL' (import component, >= 0) and 'PL-X' (export component, "
+        "<= 0); both are often non-zero in the same interval (CZ: 302 of 672 quarter-hours, 1-7 Nov 2026). Do not "
+        "read one row as the net flow: use pse.net_flows(frame), which adds X-PL and PL-X per neighbour.",
+        "Some periods also have 'UA_DOB-PL' and 'PL-UA_DOB' (a Ukrainian section); net_flows adds them to UA, as the "
+        "PSE report page does.",
+        "The sum of all rows follows the exchange balance swm_p + swm_np of his-wlk-cal (correlation 0.99998, "
+        "1-7 Nov 2026).",
+        "Flows exclude local exchange over 110 kV lines (comment on the report page).",
+    ),
 ))
 
 _add(Report(
@@ -437,12 +454,17 @@ _add(Report(
         Field("operating_mode", "Operating mode (Polish label)", dtype="str"),
         Field("power_plant", "Power plant", dtype="str"),
         Field("operating_mode_eng", "Operating mode (English label)", dtype="str"),
-        Field("value", "Generation of the unit", "MW", unit_verified=False),
+        Field("value", "Generation of the unit (>= 0); consumption (operating_mode 'Pobór', e.g. pumping) is "
+                       "negative", "MW", unit_verified=False),
     ),
     first_date=API_START,
     key=("resource_code", "operating_mode"),
-    description="Generation per unit; units with installed capacity of 100 MW or more and an EIC code.",
+    description="Generation and consumption per unit; units with installed capacity of 100 MW or more and an EIC "
+                "code.",
     revision_days=60,
+    republication_check="month",
+    notes=("Rows with operating_mode 'Pobór' ('Consumption') carry negative values (768 of 10,560 rows on "
+           "2026-11-05).",),
 ))
 
 

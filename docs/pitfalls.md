@@ -71,9 +71,19 @@ Some reports are republished after corrections. The latest republication of each
 | `poze-redoze` | up to about 70 days |
 | `en-rozl` | in steps of about 48, 108 and 228 days |
 
-The cache uses these windows (`Report.revision_days`) so a month is not frozen before PSE stops correcting it.
-For backtests where the information available at a past moment matters, note that the API only serves the latest
-version of each row.
+The cache uses these windows (`Report.revision_days`) and downloads a month again until it was fetched after the
+window. The windows cannot foresee one-off events such as the bulk republication of 2026-01-18/19 (rows of
+2025-10-02 in `gen-jw` carry publication time 2026-01-19, 109 days later): a month cached between the end of its
+window and such an event keeps the old values. `Client(check_republished=True)` asks PSE, before reusing a final
+cached month, for the latest publication time of its rows and downloads the month again if anything was published
+after the cached copy (one request per report and client for most reports, one per month for `gen-jw`, none for
+`popmb-rmb`, which the server cannot sort that way). It is off by default in 0.2.x.
+
+`Client.get(..., publication=True)` adds `publication_utc` to each row. The API only serves the latest version of
+each row, so for backtests where the information available at a past moment matters, compare the publication time
+with that moment. Forecast fields are published with their actuals: `kse-load` `load_fcst` rows carry the
+publication time of the actual load (e.g. business date 2026-08-10, published 2026-08-11 01:05 UTC), so they do not
+show when the forecast itself was first available.
 
 ## Stitching the legacy export and the API
 

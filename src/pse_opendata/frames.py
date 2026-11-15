@@ -7,11 +7,14 @@ Every frame returned by this package has the columns
     business_date            business (trading) day in Polish local time, ``datetime.date``
 
 followed by the row keys of the report (if any) and the value fields, one row per interval (and key), sorted by
-``start_utc``. Time columns always have nanosecond resolution, whichever pandas version parsed them.
+``start_utc``. Time columns always have nanosecond resolution, whichever pandas version parsed them. Frames parsed
+from the reports API also carry ``publication_utc`` (when PSE published the row), which ``Client.get`` returns
+only on request.
 
 Usage:
-    from pse_opendata.frames import to_hourly
+    from pse_opendata.frames import to_hourly, net_flows
     hourly = to_hourly(quarter_hourly_frame)
+    borders = net_flows(pse.get("przeplywy-mocy", "2026-11-01"))
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ log = logging.getLogger("pse_opendata")
 
 TZ = "Europe/Warsaw"
 TIME_COLUMNS = ["start_utc", "end_utc", "start_local", "end_local", "business_date"]
+PUBLICATION = "publication_utc"
 
 
 def _as_ns(values: pd.Series | pd.DatetimeIndex) -> Any:
@@ -108,7 +112,15 @@ def parse_records(records: list[dict[str, Any]], report: Report) -> pd.DataFrame
         out["business_date"] = published
     for f in _ordered(report.fields, report.key):
         out[f.name] = _values(raw, f)
+    out[PUBLICATION] = publication_times(raw)
     return tidy(out, report.key, dedupe=report.unique_key)
+
+
+def publication_times(raw: pd.DataFrame) -> pd.Series:
+    """``publication_ts_utc`` of API records as tz-aware UTC (NaT where absent)."""
+    if "publication_ts_utc" not in raw:
+        return pd.Series(pd.NaT, index=raw.index, dtype="datetime64[ns, UTC]")
+    return parse_utc(raw["publication_ts_utc"])
 
 
 def to_hourly(frame: pd.DataFrame, key: Sequence[str] = ()) -> pd.DataFrame:
@@ -120,6 +132,9 @@ def to_hourly(frame: pd.DataFrame, key: Sequence[str] = ()) -> pd.DataFrame:
     """
     if frame.empty:
         return frame.copy()
+    if frame.duplicated(["start_utc", *key]).any():
+        raise ValueError("several rows per interval: pass key=[...] with the columns that tell them apart "
+                         "(e.g. key=['section_code'])")
     step = (frame["end_utc"] - frame["start_utc"]).iloc[0]
     per_hour = int(pd.Timedelta("1h") / step)
     values = [c for c in frame.columns
@@ -137,3 +152,43 @@ def to_hourly(frame: pd.DataFrame, key: Sequence[str] = ()) -> pd.DataFrame:
     for c in values:
         out[c] = mean[c].to_numpy()
     return tidy(out, key)
+
+
+def net_flows(frame: pd.DataFrame) -> pd.DataFrame:
+    """Net cross-border flow per neighbouring country from a ``przeplywy-mocy`` frame.
+
+    The report has two directional rows per border and interval: ``X-PL`` with the flow into Poland (>= 0) and
+    ``PL-X`` with the flow out of Poland (<= 0), often both non-zero. This adds them per neighbour ``X``. Returns the
+    five time columns and ``neighbour``, ``import`` (from ``X-PL``), ``export`` (from ``PL-X``, <= 0) and ``net``
+    (``import + export``; + = import to Poland), in MW. Sections ``UA_DOB-PL`` / ``PL-UA_DOB`` count as ``UA``, as on
+    the PSE report page. A missing direction gives NaN in that column and in ``net``.
+    """
+    missing = {"section_code", "value"} - set(frame.columns)
+    if missing:
+        raise ValueError(f"not a przeplywy-mocy frame: missing columns {sorted(missing)}")
+    columns = [*TIME_COLUMNS, "neighbour", "import", "export", "net"]
+    if frame.empty:
+        out = frame[TIME_COLUMNS].copy()
+        for c in columns[5:]:
+            out[c] = pd.Series([], dtype=object if c == "neighbour" else "float64")
+        return out
+    ends = frame["section_code"].astype(str).str.split("-", n=1, expand=True)
+    inbound = ends[1] == "PL"
+    if not (inbound | (ends[0] == "PL")).all():
+        raise ValueError("section codes must be 'X-PL' or 'PL-X'")
+    neighbour = ends[0].where(inbound, ends[1]).str.replace("_DOB", "", regex=False)
+    value = frame["value"].astype("float64")
+    parts = pd.DataFrame({
+        "start_utc": frame["start_utc"].to_numpy(),
+        "neighbour": neighbour.to_numpy(),
+        "import": value.where(inbound).to_numpy(),
+        "export": value.where(~inbound).to_numpy(),
+    })
+    sums = parts.groupby(["start_utc", "neighbour"], sort=True)[["import", "export"]].sum(min_count=1).reset_index()
+    step = (frame["end_utc"] - frame["start_utc"]).iloc[0]
+    out = time_columns(sums["start_utc"], step)
+    out["neighbour"] = sums["neighbour"].to_numpy()
+    out["import"] = sums["import"].to_numpy()
+    out["export"] = sums["export"].to_numpy()
+    out["net"] = out["import"] + out["export"]
+    return out[columns]

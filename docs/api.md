@@ -24,6 +24,8 @@ The functions below use a shared default client; pass `client=pse.Client(...)` t
 
 ::: pse_opendata.to_hourly
 
+::: pse_opendata.net_flows
+
 ::: pse_opendata.splice_factor
 
 ## Client

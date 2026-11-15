@@ -28,7 +28,7 @@ from pse_opendata.exceptions import (
     UnknownFieldError,
     UnknownReportError,
 )
-from pse_opendata.frames import TIME_COLUMNS, to_hourly
+from pse_opendata.frames import TIME_COLUMNS, net_flows, to_hourly
 from pse_opendata.stitch import splice_factor
 
 logging.getLogger("pse_opendata").addHandler(logging.NullHandler())
@@ -37,7 +37,7 @@ __all__ = [
     "LEGACY_REPORTS", "REPORTS", "TIME_COLUMNS", "CacheMissError", "Client", "Field", "LegacyFormatError",
     "LegacyReport", "MonthLoad", "PseApiError", "PseError", "Report", "UnknownFieldError", "UnknownReportError",
     "__version__", "balancing_capacity", "default_client", "fundamentals", "get", "get_legacy_report", "get_report",
-    "history", "imbalance_prices", "legacy", "rce", "reports", "sdac", "splice_factor", "to_hourly",
+    "history", "imbalance_prices", "legacy", "net_flows", "rce", "reports", "sdac", "splice_factor", "to_hourly",
 ]
 
 _default: Client | None = None

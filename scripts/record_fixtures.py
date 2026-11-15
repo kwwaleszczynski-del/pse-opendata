@@ -6,6 +6,7 @@ The legacy server rate-limits, so legacy requests are spaced by ``--pause`` seco
 Usage:
     python scripts/record_fixtures.py               # API and legacy fixtures
     python scripts/record_fixtures.py --only api
+    python scripts/record_fixtures.py --only api --name kse-load_2026-08-10_publication
 """
 
 from __future__ import annotations
@@ -44,6 +45,8 @@ API_FIXTURES = {
                                         ["reserve_type", "pom", "com", "comrr"], 20000),
     "przeplywy-mocy_2025-10-02_first_interval": ("przeplywy-mocy", "dtime_utc eq '2025-10-01 22:15:00'",
                                                  ["section_code", "value"], 20000),
+    "kse-load_2026-08-10_publication": ("kse-load", "business_date eq '2026-08-10'",
+                                        ["load_fcst", "load_actual", "publication_ts_utc"], 20000),
     "poze-redoze_2024-09-24_first_rows": ("poze-redoze", "business_date eq '2024-09-24'",
                                           ["pv_red_balance", "wi_red_network"], 4),
 }
@@ -63,8 +66,10 @@ LEGACY_FIXTURES = {
 }
 
 
-def record_api(session: requests.Session) -> None:
+def record_api(session: requests.Session, names: list[str] | None = None) -> None:
     for name, (endpoint, flt, fields, first) in API_FIXTURES.items():
+        if names and name not in names:
+            continue
         params = {"$filter": flt, "$select": ",".join(["dtime_utc", "business_date", *fields]), "$first": first}
         url, pages = f"{API}/{endpoint}", []
         while url:
@@ -99,13 +104,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--only", choices=["api", "legacy"])
     parser.add_argument("--pause", type=float, default=30.0, help="seconds between legacy requests")
+    parser.add_argument("--name", action="append", help="record only this API fixture (repeatable)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     (ROOT / "api").mkdir(parents=True, exist_ok=True)
     (ROOT / "legacy").mkdir(parents=True, exist_ok=True)
     session = requests.Session()
     if args.only in (None, "api"):
-        record_api(session)
+        record_api(session, args.name)
     if args.only in (None, "legacy"):
         record_legacy(session, args.pause)
 

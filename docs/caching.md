@@ -18,8 +18,20 @@ prices, 240 for imbalance volumes; see the [catalogue](reports.md) and [revision
 then a request for the whole month downloads and stores it again, and a request for part of it downloads just
 those days. Legacy months are always final. Empty months are never stored.
 
-Each file stores the download time in its Parquet metadata, so copying the cache (e.g. between CI runs) keeps the
-right state. Writes are atomic.
+**Republication check.** PSE sometimes republishes old data long after the window (June 2024 - December 2025 of
+`his-wlk-cal`, `kse-load` and `przeplywy-mocy`, and 2025 of `gen-jw`, on 2026-01-18/19). A month cached between the
+end of its window and such a republication would otherwise be reused with the old values. With
+`Client(check_republished=True)` the client asks PSE, before reusing final cached months, for the latest
+publication time of their rows and downloads again any month with rows published after the cached copy. For most
+reports this is one request per report for all months of a call (about 1-5 s; 27 s for `przeplywy-mocy`), then one
+per month only if something is newer; `gen-jw` needs one request per month and `popmb-rmb` is not checked (the
+server cannot sort it that way). Each client checks a month once, the check is skipped offline and a failed check
+only logs a warning. It is off by default in 0.2.x, so existing request patterns do not change; switch it on for
+caches kept for months.
+
+Each file stores the download time and the latest publication time of its rows in its Parquet metadata, so copying
+the cache (e.g. between CI runs) keeps the right state. Files written before 0.2.1 have no publication time; the
+check then compares with the download time. Writes are atomic.
 
 ## What was loaded
 
@@ -30,13 +42,15 @@ freshness:
 ```python
 client = pse.Client(cache_dir="data/pse", allow_stale=True)
 prices = client.rce("2025-01-01", "2025-03-31")
-for m in client.loads:            # MonthLoad(source, name, month, status, fetched_utc, rows)
-    print(m.name, f"{m.month:%Y-%m}", m.status, f"{m.fetched_utc:%Y-%m-%d %H:%M}", m.rows)
+for m in client.loads:            # MonthLoad(source, name, month, status, fetched_utc, rows, complete)
+    print(m.name, f"{m.month:%Y-%m}", m.status, f"{m.fetched_utc:%Y-%m-%d %H:%M}", m.rows, m.complete)
 client.loads.clear()
 ```
 
-A month that cannot be loaded at all (download failed and no cached copy, or offline without one) raises an
-exception and is not listed.
+`complete` is `False` when a cached or stale copy was downloaded before the end of the requested days (e.g. a file
+of the current month used offline or after a failed download), so its later intervals may be missing; a warning is
+logged as well. A month that cannot be loaded at all (download failed and no cached copy, or offline without one)
+raises an exception and is not listed.
 
 ```python
 import pse_opendata as pse
@@ -47,6 +61,7 @@ client = pse.Client(refresh=True)                    # download again, rewrite t
 client = pse.Client(offline=True)                    # cache only; CacheMissError if a month is missing
 client = pse.Client(allow_stale=True)                # if a download fails (PseError), use the cached copy
 client = pse.Client(revision_days=10)                # one window for all reports
+client = pse.Client(check_republished=True)          # re-download months PSE republished later
 rce = client.rce("2025-01-01", "2025-12-31")
 ```
 
@@ -54,7 +69,8 @@ rce = client.rce("2025-01-01", "2025-12-31")
 
 - **Retries**: network errors (including a connection dropped mid-response), timeouts, HTTP 429 and any 5xx are
   retried 4 times with exponential backoff (2, 4, 8, 16 s for the API; 30 s and up for the legacy export), or as
-  long as `Retry-After` asks. Other HTTP errors are raised at once.
+  long as `Retry-After` asks, at most 120 s for the API and 600 s for the legacy export per wait. Other HTTP errors
+  are raised at once.
 - **Write errors**: if a cache file cannot be written (permissions, full disk), a warning is logged and the
   downloaded data are still returned.
 - **`cache --clear`** deletes only the `api/` and `legacy/` sub-folders of the cache directory.

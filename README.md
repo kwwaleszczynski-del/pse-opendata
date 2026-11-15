@@ -89,7 +89,7 @@ pse-opendata reports
 | `kse-load` | Forecast and actual load | 15 min | 2024-06-14 |
 | `pdgopkd` | Day-ahead coordinated plan (forecast demand, wind, PV, reserves) | 15 min | 2024-06-14 |
 | `poze-redoze` | Non-market redispatch of wind and PV | 15 min | 2024-09-24 |
-| `przeplywy-mocy` | Physical cross-border flows per section | 15 min, many rows | 2024-06-14 |
+| `przeplywy-mocy` | Physical cross-border flows, import and export rows per border (`net_flows`) | 15 min, many rows | 2024-06-14 |
 | `gen-jw` | Generation per unit (≥ 100 MW) | 15 min, many rows | 2024-06-14 |
 
 Legacy export (hourly, until 2024-06-13): `PL_WYK_KSE` (demand, JWCD/nJWCD generation, exchange, from 2009),
@@ -104,9 +104,11 @@ be read raw with `pse.Client().records(endpoint, filter=...)`.
 
 - Whole months are cached as Parquet files (`$PSE_OPENDATA_CACHE` or the user cache directory; `Client(cache_dir=...)`
   to choose, `cache_dir=None` to switch off). A month is reused only once it was downloaded after the report's
-  revision window (3 days for prices, up to 240 days for settlement volumes); the legacy history never changes.
-- Requests retry with exponential backoff on network errors, HTTP 429 and 5xx (honouring `Retry-After`) and are
-  spaced (0.2 s for the API, 15 s for the legacy export).
+  revision window (3 days for prices, up to 240 days for settlement volumes); `check_republished=True` also asks
+  PSE whether a cached month was republished later (one small request per report); the legacy history never
+  changes.
+- Requests retry with exponential backoff on network errors, HTTP 429 and 5xx (honouring `Retry-After`, up to
+  120 s per wait) and are spaced (0.2 s for the API, 15 s for the legacy export).
 - `offline=True` reads the cache only; `allow_stale=True` falls back to a cached copy when a download fails.
 - Errors are explicit: `PseApiError` (with the API's message), `UnknownReportError`, `UnknownFieldError`,
   `CacheMissError`, `LegacyFormatError`. Logging goes to the `pse_opendata` logger.

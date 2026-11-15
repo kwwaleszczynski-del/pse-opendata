@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [semantic versioning](https://semver.org/).
 
+## [0.2.1] - unreleased
+
+Fixes from an independent review. Default behaviour is unchanged except where noted under Changed.
+
+### Added
+
+- `net_flows(frame)`: net cross-border flow per neighbour from `przeplywy-mocy`, adding the two directional rows of
+  each border (`X-PL` import >= 0, `PL-X` export <= 0); `UA_DOB` sections count as `UA`.
+- `get(..., publication=True)` adds `publication_utc`, when PSE published each row (e.g. `kse-load` `load_fcst` is
+  published with the actual load the next day).
+- `Client(check_republished=True)`: before reusing final cached months, ask PSE for the latest publication time of
+  their rows (usually one request per report and client) and download again months republished after the cached
+  copy, such as the bulk republication of 2024-2025 data on 2026-01-18/19. Off by default in 0.2.x.
+- `MonthLoad.complete`: `False` (with a warning) when a cached or stale copy was downloaded before the end of the
+  requested days, e.g. a current-month file used offline.
+- Cache files store the latest publication time of their rows; files written by 0.2.0 stay valid.
+
+### Changed
+
+- `to_hourly` raises `ValueError` for frames with several rows per interval and no `key` (it returned all-NaN
+  values).
+- Requests to the reports API also select `publication_ts_utc` (slightly larger responses); parsed frames and cache
+  files carry a `publication_utc` column, which `get` returns only with `publication=True`.
+
+### Fixed
+
+- Catalogue: `przeplywy-mocy` `section_code` and `value` described one signed row per border; they are directional
+  rows. `gen-jw` `value` now says that consumption (`operating_mode` "Pobór") is negative.
+- Documentation: `Retry-After` waits are capped at `max_backoff` (120 s API, 600 s legacy export); the revisions
+  section no longer claims the cache cannot freeze a month before PSE stops correcting it.
+
 ## [0.2.0] - 2026-10-31
 
 First release on PyPI.

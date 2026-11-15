@@ -31,7 +31,7 @@ from pse_opendata.catalog import (
     get_report,
 )
 from pse_opendata.exceptions import CacheMissError, PseApiError, PseError, UnknownFieldError
-from pse_opendata.frames import TIME_COLUMNS, TZ, empty_frame, parse_records, tidy, to_hourly
+from pse_opendata.frames import PUBLICATION, TIME_COLUMNS, TZ, empty_frame, parse_records, tidy, to_hourly
 from pse_opendata.legacy_csv import fetch_legacy
 from pse_opendata.stitch import SEAM, SERIES, clamp, splice_factor
 
@@ -78,6 +78,8 @@ class MonthLoad:
     ``status`` is ``"cached"`` (a final or offline copy from the cache), ``"downloaded"`` or ``"stale"`` (the
     download failed and ``allow_stale`` used the cached copy). ``fetched_utc`` is when the data were downloaded
     (for cached and stale months, when the cached copy was). ``rows`` counts the rows of the requested days.
+    ``complete`` is ``False`` when a cached or stale copy was downloaded before the end of the requested days, so
+    later intervals may be missing (e.g. a current-month file used offline).
     """
 
     source: Literal["api", "legacy"]
@@ -86,6 +88,7 @@ class MonthLoad:
     status: Literal["cached", "downloaded", "stale"]
     fetched_utc: datetime
     rows: int
+    complete: bool = True
 
 
 def _concat(frames: list[pd.DataFrame], fields: Sequence[Field], key: Sequence[str] = (),
@@ -107,6 +110,10 @@ class Client:
         allow_stale: when a download fails, use the cached copy of the month (with a warning) instead of raising.
         revision_days: override the per-report number of days after the end of a month during which the cache
             re-downloads it (see :attr:`pse_opendata.catalog.Report.revision_days`).
+        check_republished: before reusing final cached months of the reports API, ask PSE (usually one small
+            request per report and client) whether any of their rows was published again later, and download such
+            months anew. Off by default in 0.2.x to keep request patterns unchanged; recommended for caches kept
+            for months. Skipped offline; if the check itself fails, a warning is logged and the cache is used.
         timeout: seconds per request (at least 180 for the legacy export).
         retries: retries per request, with exponential backoff, on network errors, HTTP 429 and 5xx.
         min_interval: pause in seconds between requests to the reports API.
@@ -130,6 +137,7 @@ class Client:
         offline: bool = False,
         allow_stale: bool = False,
         revision_days: int | None = None,
+        check_republished: bool = False,
         timeout: float = 60.0,
         retries: int = 4,
         min_interval: float = 0.2,
@@ -146,12 +154,16 @@ class Client:
         self.offline = offline
         self.allow_stale = allow_stale
         self.revision_days = revision_days
+        self.check_republished = check_republished
         self.page_size = page_size
         self.loads: list[MonthLoad] = []
+        self._checked: set[tuple[str, date]] = set()     # (report, month) checked for republication by this client
         self._now = now or (lambda: datetime.now(UTC))
         session = session if session is not None else requests.Session()
         sleep = sleep or time.sleep
         self.http = HttpClient(session, timeout=timeout, retries=retries, min_interval=min_interval, sleep=sleep)
+        # the republication check is optional: one quick attempt, no retries
+        self.check_http = HttpClient(session, timeout=45.0, retries=0, min_interval=min_interval, sleep=sleep)
         self.legacy_http = HttpClient(session, timeout=max(timeout, 180.0), retries=retries, backoff=30.0,
                                       max_backoff=600.0, min_interval=legacy_min_interval, sleep=sleep)
 
@@ -209,7 +221,7 @@ class Client:
 
         Reports with ``unique_key=False`` are always requested day by day in a single page.
         """
-        select = [report.time_field, "business_date", *report.field_names]
+        select = [report.time_field, "business_date", *report.field_names, "publication_ts_utc"]
         flt = f"business_date ge '{start:%Y-%m-%d}' and business_date le '{end:%Y-%m-%d}'"
         if not report.unique_key:
             records = self._by_day(report, start, end, select)
@@ -236,45 +248,55 @@ class Client:
             return cached
         if not self.offline:
             return None
-        log.warning("%s/%s %s: cached file lacks %s; filled with NaN", source, name, f"{month:%Y-%m}", missing)
-        return CachedMonth(cached.frame.assign(**{c: float("nan") for c in missing}), cached.fetched_utc,
-                           cached.first_day, cached.last_day)
+        log.warning("%s/%s %s: cached file lacks %s; filled with empty values", source, name, f"{month:%Y-%m}",
+                    missing)
+        filled = {c: pd.Series(pd.NaT, index=cached.frame.index, dtype="datetime64[ns, UTC]") if c == PUBLICATION
+                  else float("nan") for c in missing}
+        return CachedMonth(cached.frame.assign(**filled), cached.fetched_utc, cached.first_day, cached.last_day,
+                           cached.published_utc)
 
     def _monthly(self, source: Literal["api", "legacy"], name: str, start: date, end: date,
                  fetch: Callable[[date, date], pd.DataFrame], revision_days: int | None,
-                 available: tuple[date, date | None], columns: Sequence[str]) -> list[pd.DataFrame]:
+                 available: tuple[date, date | None], columns: Sequence[str],
+                 report: Report | None = None) -> list[pd.DataFrame]:
         """Load ``start``..``end`` month by month through the cache.
 
         A whole month (or the part of it in which the source has data, ``available``) is downloaded and cached when
         the request covers it; part of a month is downloaded alone, unless a final cached copy exists.
         ``revision_days=None`` means the data never change (legacy export). ``columns``: fields a cached file must
-        have.
+        have. ``report``: catalogue entry of an API report, for the republication check of final cached months.
         """
+        spans = [(first, last, max(start, first), min(end, last)) for first, last in months(start, end)]
+        cached = {first: self._read_cache(source, name, first, columns) for first, *_ in spans}
+        final = {first: c for first, last, *_ in spans
+                 if (c := cached[first]) is not None and self._final(c, last, revision_days)}
+        republished = set()
+        if report is not None and final and not (self.offline or self.refresh):
+            republished = self._republished(report, final)
         frames = []
-        for first, last in months(start, end):
-            lo, hi = max(start, first), min(end, last)
-            frame, status, fetched_utc = self._month(source, name, first, last, lo, hi, fetch, revision_days,
-                                                     available, columns)
+        for first, last, lo, hi in spans:
+            frame, status, fetched_utc, complete = self._month(
+                source, name, first, last, lo, hi, fetch, revision_days, available, cached[first],
+                first in republished)
             part = _between(frame, lo, hi)
             frames.append(part)
-            self.loads.append(MonthLoad(source, name, first, status, fetched_utc, len(part)))
+            self.loads.append(MonthLoad(source, name, first, status, fetched_utc, len(part), complete))
         return frames
 
     def _month(self, source: Literal["api", "legacy"], name: str, first: date, last: date, lo: date, hi: date,
                fetch: Callable[[date, date], pd.DataFrame], revision_days: int | None,
-               available: tuple[date, date | None], columns: Sequence[str],
-               ) -> tuple[pd.DataFrame, Literal["cached", "downloaded", "stale"], datetime]:
-        """One month of :meth:`_monthly`: the frame (possibly wider than ``lo``..``hi``), how it was loaded and when
-        it was downloaded."""
-        whole = lo == max(first, available[0]) and hi == min(last, available[1] or last)
-        cached = self._read_cache(source, name, first, columns)
+               available: tuple[date, date | None], cached: CachedMonth | None, republished: bool,
+               ) -> tuple[pd.DataFrame, Literal["cached", "downloaded", "stale"], datetime, bool]:
+        """One month of :meth:`_monthly`: the frame (possibly wider than ``lo``..``hi``), how it was loaded, when it
+        was downloaded and whether a cached copy covers the requested days."""
+        whole = republished or (lo == max(first, available[0]) and hi == min(last, available[1] or last))
         if self.offline:
             if cached is None:
                 where = self.cache.root if self.cache is not None else "(cache disabled)"
                 raise CacheMissError(f"{source}/{name} {first:%Y-%m} is not in the cache {where}")
-            return cached.frame, "cached", cached.fetched_utc
-        if cached is not None and not self.refresh and self._final(cached, last, revision_days):
-            return cached.frame, "cached", cached.fetched_utc
+            return cached.frame, "cached", cached.fetched_utc, self._covers(cached, source, name, first, hi)
+        if cached is not None and not self.refresh and not republished and self._final(cached, last, revision_days):
+            return cached.frame, "cached", cached.fetched_utc, True
         fetched_utc = self._now()
         try:
             frame = fetch(first, last) if whole else fetch(lo, hi)
@@ -282,15 +304,26 @@ class Client:
             if self.allow_stale and cached is not None:
                 log.warning("%s %s %s: download failed (%s); using the copy cached on %s", source, name,
                             f"{first:%Y-%m}", e, f"{cached.fetched_utc:%Y-%m-%d %H:%M}")
-                return cached.frame, "stale", cached.fetched_utc
+                return cached.frame, "stale", cached.fetched_utc, self._covers(cached, source, name, first, hi)
             raise
         if whole and self.cache is not None and len(frame):     # an empty month is never stored as final
+            published = frame[PUBLICATION].max() if PUBLICATION in frame else None
             try:
                 self.cache.write(source, name, first, frame, fetched_utc=fetched_utc, first_day=first,
-                                 last_day=last)
+                                 last_day=last, published_utc=None if pd.isna(published) else published)
             except OSError as e:
                 log.warning("%s %s %s: could not write the cache (%s)", source, name, f"{first:%Y-%m}", e)
-        return frame, "downloaded", fetched_utc
+        return frame, "downloaded", fetched_utc, True
+
+    @staticmethod
+    def _covers(cached: CachedMonth, source: str, name: str, month: date, hi: date) -> bool:
+        """Whether a cached copy was downloaded after the end of business date ``hi``; warns if not."""
+        day_end = pd.Timestamp(hi + timedelta(days=1)).tz_localize(TZ)
+        if cached.fetched_utc >= day_end:
+            return True
+        log.warning("%s %s %s: the cached copy was downloaded on %s, before the end of %s; later intervals may be "
+                    "missing", source, name, f"{month:%Y-%m}", f"{cached.fetched_utc:%Y-%m-%d %H:%M} UTC", hi)
+        return False
 
     def _final(self, cached: CachedMonth, last_day: date, revision_days: int | None) -> bool:
         if revision_days is None:
@@ -298,14 +331,60 @@ class Client:
         days = self.revision_days if self.revision_days is not None else revision_days
         return cached.fetched_utc.date() >= last_day + timedelta(days=days)
 
+    def _latest_publication(self, report: Report, first: date, last: date) -> pd.Timestamp | None:
+        """Latest ``publication_ts_utc`` of a report's rows for business dates ``first``..``last`` (one request)."""
+        params = {"$filter": f"business_date ge '{first:%Y-%m-%d}' and business_date le '{last:%Y-%m-%d}'",
+                  "$orderby": "publication_ts_utc desc", "$first": 1, "$select": "publication_ts_utc"}
+        payload = self.check_http.get(f"{BASE_URL}/{report.name}", params, decode=lambda r: r.json())
+        rows = payload.get("value") if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            raise PseApiError(f"unexpected response from {report.name}: no 'value' list")
+        if not rows or not rows[0].get("publication_ts_utc"):
+            return None
+        return pd.Timestamp(rows[0]["publication_ts_utc"], tz="UTC")
+
+    def _republished(self, report: Report, final: dict[date, CachedMonth]) -> set[date]:
+        """Final cached months of which PSE has published rows after the cached copy (see ``check_republished``).
+
+        A cached copy is up to date when its latest publication time (or, in files written before 0.2.1, its
+        download time) is not older than the latest publication PSE reports now for the month.
+        """
+        if not self.check_republished or report.republication_check == "none":
+            return set()
+        todo = {m: c for m, c in final.items() if (report.name, m) not in self._checked}
+        if not todo:
+            return set()
+        marks = {m: pd.Timestamp(c.published_utc or c.fetched_utc).tz_convert("UTC") for m, c in todo.items()}
+        stale: set[date] = set()
+        try:
+            candidates = sorted(todo)
+            if report.republication_check == "span" and len(todo) > 1:
+                latest = self._latest_publication(report, min(todo), max(c.last_day for c in todo.values()))
+                candidates = [m for m in candidates if latest is not None and latest > marks[m]]
+            for m in candidates:
+                latest = self._latest_publication(report, m, todo[m].last_day)
+                if latest is not None and latest > marks[m]:
+                    stale.add(m)
+        except PseError as e:
+            log.warning("%s: could not check PSE for republished data (%s); using the cached months", report.name, e)
+            return set()
+        self._checked.update((report.name, m) for m in todo)
+        for m in sorted(stale):
+            log.info("%s %s: republished by PSE after the cached copy; downloading it again", report.name,
+                     f"{m:%Y-%m}")
+        return stale
+
     def get(self, report: str, start: DateLike, end: DateLike | None = None, *,
-            fields: Sequence[str] | None = None, dropna: bool = False) -> pd.DataFrame:
+            fields: Sequence[str] | None = None, dropna: bool = False, publication: bool = False) -> pd.DataFrame:
         """Data of one report for business dates ``start``..``end`` (inclusive, Polish local days).
 
         Returns a frame with ``start_utc``, ``end_utc``, ``start_local``, ``end_local``, ``business_date``, the
         row keys of the report (if any) and the value fields (all of them, or ``fields``), one row per interval.
         ``end`` defaults to ``start``. Dates before the first date of the report are skipped.
         ``dropna=True`` drops rows in which all requested values are empty (e.g. future intervals of today).
+        ``publication=True`` adds ``publication_utc``, when PSE published the row (tz-aware UTC). It shows which
+        version of the data you have: a forecast field published after the fact (e.g. ``kse-load`` ``load_fcst``,
+        published with the actual load the next day) is not the forecast that was available beforehand.
         """
         spec = get_report(report)
         selected = self._select(spec.fields, spec.key, fields, spec.name)
@@ -318,10 +397,11 @@ class Client:
         else:
             if span[0] > lo:
                 log.info("%s starts on %s; earlier dates skipped", spec.name, spec.first_date)
+            columns = [*spec.field_names, PUBLICATION] if publication else spec.field_names
             frames = self._monthly("api", spec.name, span[0], span[1], lambda a, b: self._fetch_api(spec, a, b),
-                                   spec.revision_days, (spec.first_date, None), spec.field_names)
+                                   spec.revision_days, (spec.first_date, None), columns, report=spec)
         out = _concat(frames, spec.fields, spec.key, spec.unique_key)
-        return self._finish(out, spec.key, selected, dropna)
+        return self._finish(out, spec.key, selected, dropna, publication)
 
     @staticmethod
     def _select(all_fields: Sequence[Field], key: Sequence[str], fields: Sequence[str] | None, name: str) -> list[str]:
@@ -336,8 +416,11 @@ class Client:
         return [f for f in fields if f not in key]
 
     @staticmethod
-    def _finish(frame: pd.DataFrame, key: Sequence[str], selected: list[str], dropna: bool) -> pd.DataFrame:
-        out = frame[[*TIME_COLUMNS, *key, *selected]]
+    def _finish(frame: pd.DataFrame, key: Sequence[str], selected: list[str], dropna: bool,
+                publication: bool = False) -> pd.DataFrame:
+        if publication and PUBLICATION not in frame:
+            frame = frame.assign(**{PUBLICATION: pd.Series(pd.NaT, index=frame.index, dtype="datetime64[ns, UTC]")})
+        out = frame[[*TIME_COLUMNS, *key, *selected, *([PUBLICATION] if publication else [])]]
         if dropna and selected:
             out = out.dropna(subset=selected, how="all")
         return out.reset_index(drop=True)

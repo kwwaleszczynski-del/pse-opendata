@@ -35,7 +35,7 @@ def test_follows_next_link_pages(make_client):
     assert [url for url, _ in session.calls][1:] == [p["nextLink"] for p in pages[:-1]]
     first_params = session.calls[0][1]
     assert first_params["$filter"] == "business_date ge '2025-10-02' and business_date le '2025-10-02'"
-    assert first_params["$select"] == "dtime_utc,business_date,rce_pln"
+    assert first_params["$select"] == "dtime_utc,business_date,rce_pln,publication_ts_utc"
     assert first_params["$first"] == 20000
 
 

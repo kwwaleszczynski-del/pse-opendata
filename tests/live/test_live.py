@@ -62,3 +62,19 @@ def test_legacy_export_answers(client):
     frame = client.legacy("PL_CENY_RYN_EN", "2023-10-28", "2023-10-29")
     assert len(frame) == 24 + 25
     assert frame["rce"].notna().all()
+
+
+def test_net_flows_follow_the_exchange_balance(client):
+    borders = pse.net_flows(client.get("przeplywy-mocy", DAY))
+    total = borders.groupby("start_utc")["net"].sum()
+    balance = client.get("his-wlk-cal", DAY, fields=["swm_p", "swm_np"]).set_index("start_utc")
+    joined = pd.concat([total, balance["swm_p"] + balance["swm_np"]], axis=1).dropna()
+    assert len(joined) > 80 and joined.corr().iloc[0, 1] > 0.99
+    assert (borders["import"] >= 0).all() and (borders["export"] <= 0).all()
+
+
+def test_republication_check_query_answers(client):
+    month = (DAY.replace(day=1) - timedelta(days=1)).replace(day=1)
+    last = DAY.replace(day=1) - timedelta(days=1)
+    latest = client._latest_publication(REPORTS["his-wlk-cal"], month, last)
+    assert latest is not None and latest.date() > month

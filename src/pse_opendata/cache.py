@@ -2,7 +2,8 @@
 
 One file per report and calendar month (business dates): ``<cache_dir>/<source>/<report>/<YYYY-MM>.parquet``,
 with ``source`` = ``api`` or ``legacy``. Each file stores when it was downloaded, which decides whether the month is
-final (see :attr:`pse_opendata.catalog.Report.revision_days`). Files are written atomically.
+final (see :attr:`pse_opendata.catalog.Report.revision_days`), and the latest PSE publication time of its rows, which
+is compared with PSE to detect later republications. Files are written atomically.
 
 The default directory is ``$PSE_OPENDATA_CACHE`` if set, otherwise the user cache directory:
 ``%LOCALAPPDATA%\\pse-opendata\\cache`` on Windows, ``~/Library/Caches/pse-opendata`` on macOS and
@@ -30,7 +31,7 @@ from pse_opendata._version import __version__
 
 META_KEY = b"pse_opendata"
 SOURCES = ("api", "legacy")
-DATETIME_COLUMNS = ["start_utc", "end_utc", "start_local", "end_local"]
+DATETIME_COLUMNS = ["start_utc", "end_utc", "start_local", "end_local", "publication_utc"]
 
 
 def default_cache_dir() -> Path:
@@ -51,6 +52,7 @@ class CachedMonth:
     fetched_utc: datetime
     first_day: date
     last_day: date
+    published_utc: datetime | None = None     # latest PSE publication time of the rows; None in files before 0.2.1
 
 
 class MonthCache:
@@ -71,22 +73,28 @@ class MonthCache:
             fetched_utc = datetime.fromisoformat(meta["fetched_utc"])
             first_day = date.fromisoformat(meta["first_day"])
             last_day = date.fromisoformat(meta["last_day"])
+            published = meta.get("published_utc")
+            published_utc = datetime.fromisoformat(published) if published else None
             frame = table.to_pandas()
         except (OSError, KeyError, TypeError, ValueError, pa.ArrowException):
             return None
         for col in DATETIME_COLUMNS:
             if col in frame:
                 frame[col] = frame[col].dt.as_unit("ns")
-        return CachedMonth(frame=frame, fetched_utc=fetched_utc, first_day=first_day, last_day=last_day)
+        return CachedMonth(frame=frame, fetched_utc=fetched_utc, first_day=first_day, last_day=last_day,
+                           published_utc=published_utc)
 
     def write(self, source: str, report: str, month: date, frame: pd.DataFrame, *, fetched_utc: datetime,
-              first_day: date, last_day: date) -> Path:
-        """Store the frame of one month; ``first_day``..``last_day`` are the business dates it covers."""
+              first_day: date, last_day: date, published_utc: datetime | None = None) -> Path:
+        """Store the frame of one month; ``first_day``..``last_day`` are the business dates it covers and
+        ``published_utc`` the latest publication time of its rows (API reports)."""
         path = self.path(source, report, month)
         path.parent.mkdir(parents=True, exist_ok=True)
         table = pa.Table.from_pandas(frame, preserve_index=False)
         meta = {"fetched_utc": fetched_utc.isoformat(), "first_day": first_day.isoformat(),
                 "last_day": last_day.isoformat(), "report": report, "version": __version__}
+        if published_utc is not None:
+            meta["published_utc"] = published_utc.isoformat()
         table = table.replace_schema_metadata({**(table.schema.metadata or {}), META_KEY: json.dumps(meta)})
         tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
         pq.write_table(table, tmp)

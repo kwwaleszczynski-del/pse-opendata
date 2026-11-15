@@ -70,6 +70,37 @@ cap.iloc[:2, 5:9]
 anonymous offers behind the primary procurement are in `pse.get("popmb-rmb", day)`, several thousand rows per day,
 sorted by product and price.
 
+## Cross-border flows
+
+`przeplywy-mocy` has two rows per border and quarter-hour: `X-PL` with the flow into Poland (>= 0) and `PL-X` with the
+flow out of Poland (<= 0). Both are often non-zero at once, so one row is not the net flow:
+
+```python
+flows = pse.get("przeplywy-mocy", "2026-11-01", "2026-11-07")
+borders = pse.net_flows(flows)        # neighbour, import, export, net (+ = import to Poland), MW
+borders.groupby("neighbour")["net"].mean().round(1)
+```
+
+```text
+neighbour
+CZ    -613.4
+DE    1692.7
+LT      78.0
+SE      80.6
+SK    -553.0
+UA     -71.0
+```
+
+## Data versions
+
+```python
+load = pse.get("kse-load", "2026-08-10", publication=True)
+load[["start_local", "load_fcst", "load_actual", "publication_utc"]].head(1)
+```
+
+`publication_utc` is when PSE published the row. Here the forecast `load_fcst` carries the publication time of the
+actual load (the next day), so the API does not tell when the forecast was first available.
+
 ## Settings and cache
 
 ```python

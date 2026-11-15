@@ -24,6 +24,8 @@ from pse_opendata.catalog import (
 
 OUT = Path(__file__).resolve().parents[1] / "docs" / "reports.md"
 GROUPS = {"prices": "Prices", "balancing": "Balancing market", "system": "Power system"}
+CHECKS = {"span": "one request for all cached months of a call", "month": "one request per cached month",
+          "none": "none (the server cannot sort the rows by publication time)"}
 
 
 def _unit(f: Field) -> str:
@@ -51,7 +53,8 @@ def render() -> str:
         "",
         "**Revision window**: how many days after the end of a month PSE republished data of that month "
         "(latest republication seen for September 2025 to October 2026, rounded up). The cache downloads a month "
-        "again until it was fetched at least this long after the month ended.",
+        "again until it was fetched at least this long after the month ended. **Republication check**: how the "
+        "client asks PSE, before reusing a final cached month, whether its rows were published again later.",
         "",
         "## Reports API",
         "",
@@ -73,6 +76,7 @@ def render() -> str:
                 f"- Resolution: {r.resolution}; rows stamped with the interval end (`{r.time_field}`)",
                 f"- Available from business date {r.first_date}",
                 f"- Revision window: {r.revision_days} days",
+                f"- Republication check: {CHECKS[r.republication_check]}",
             ]
             if r.key:
                 unique = "" if r.unique_key else "; rows can repeat exactly"

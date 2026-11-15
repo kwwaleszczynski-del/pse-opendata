@@ -41,8 +41,9 @@ def _error_message(response: requests.Response) -> tuple[str, str | None]:
 class HttpClient:
     """GET requests with retries on network errors (also a connection dropped mid-body), HTTP 429 and 5xx.
 
-    Waits ``backoff * 2**attempt`` seconds (at most ``max_backoff``) between attempts, or what ``Retry-After`` asks
-    for. ``min_interval`` is the pause between the end of one request and the start of the next one.
+    Waits ``backoff * 2**attempt`` seconds between attempts, or what ``Retry-After`` asks for, in both cases at most
+    ``max_backoff`` (so a long ``Retry-After`` cannot stall a job for hours). ``min_interval`` is the pause between
+    the end of one request and the start of the next one.
     ``sleep`` and ``clock`` can be replaced in tests.
     """
 

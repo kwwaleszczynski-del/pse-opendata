@@ -4,7 +4,7 @@
 
 Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.pl/api/openapi) of the reports API, the [field map](https://api.raporty.pse.pl/EndpointsMap.pdf), the report pages on raporty.pse.pl and the API itself. A unit that no PSE source confirms is marked *unverified*. Prices: PSE writes `zł/MWh` and `zł/MW-h`; here `PLN/MWh` (energy) and `PLN/MW/h` (capacity, per MW and hour).
 
-**Revision window**: how many days after the end of a month PSE republished data of that month (latest republication seen for September 2025 to October 2026, rounded up). The cache downloads a month again until it was fetched at least this long after the month ended.
+**Revision window**: how many days after the end of a month PSE republished data of that month (latest republication seen for September 2025 to October 2026, rounded up). The cache downloads a month again until it was fetched at least this long after the month ended. **Republication check**: how the client asks PSE, before reusing a final cached month, whether its rows were published again later.
 
 ## Reports API
 
@@ -36,6 +36,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 3 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/rce-pln>
 
 | Field | Description | Unit |
@@ -51,6 +52,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 3 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/csdac-pln>
 
 | Field | Description | Unit |
@@ -68,6 +70,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 120 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/crb-rozl>
 
 | Field | Description | Unit |
@@ -90,6 +93,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 240 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/en-rozl>
 
 | Field | Description | Unit |
@@ -105,6 +109,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 120 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/eb-rozl>
 
 | Field | Description | Unit |
@@ -123,6 +128,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 1h; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 3 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/cmbp-tp>
 
 | Field | Description | Unit |
@@ -146,6 +152,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 1h; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 3 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/mbp-tp>
 
 | Field | Description | Unit |
@@ -168,6 +175,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 3 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/cmbu-tu>
 
 | Field | Description | Unit |
@@ -188,6 +196,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 3 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/mbu-tu>
 
 | Field | Description | Unit |
@@ -208,6 +217,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 1h; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 3 days
+- Republication check: none (the server cannot sort the rows by publication time)
 - Several rows per interval, keyed by `reserve_type`, `com`, `pom`, `comrr`; rows can repeat exactly
 - PSE page: <https://raporty.pse.pl/report/popmb-rmb>
 
@@ -231,6 +241,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 60 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/his-wlk-cal>
 
 | Field | Description | Unit |
@@ -264,6 +275,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 60 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/kse-load>
 
 | Field | Description | Unit |
@@ -280,6 +292,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 3 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/pdgopkd>
 
 | Field | Description | Unit |
@@ -324,6 +337,7 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-09-24
 - Revision window: 90 days
+- Republication check: one request for all cached months of a call
 - PSE page: <https://raporty.pse.pl/report/poze-redoze>
 
 | Field | Description | Unit |
@@ -337,28 +351,33 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 
 #### przeplywy-mocy
 
-**Cross-border electricity exchange, technical flows** (Wymiana międzysystemowa, przepływy mocy). Physical flows on the commercial cross-sections, one row per section and interval.
+**Cross-border electricity exchange, technical flows** (Wymiana międzysystemowa, przepływy mocy). Physical flows on the commercial cross-sections, two directional rows per border and interval.
 
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 60 days
+- Republication check: one request for all cached months of a call
 - Several rows per interval, keyed by `section_code`
 - PSE page: <https://raporty.pse.pl/report/przeplywy-mocy>
 
 | Field | Description | Unit |
 |---|---|---|
-| `section_code` | Cross-section, e.g. 'CZ-PL' | text |
-| `value` | Physical power flow on the cross-section; + = import to Poland, - = export | MW |
+| `section_code` | Directional section: 'X-PL' (flow from country X into Poland) or 'PL-X' (flow from Poland to X) | text |
+| `value` | Flow in the direction of the section: >= 0 on 'X-PL' (import), <= 0 on 'PL-X' (export); the net flow with X is the sum of both rows | MW |
 
+- Each border has two rows per interval, 'X-PL' (import component, >= 0) and 'PL-X' (export component, <= 0); both are often non-zero in the same interval (CZ: 302 of 672 quarter-hours, 1-7 Nov 2026). Do not read one row as the net flow: use pse.net_flows(frame), which adds X-PL and PL-X per neighbour.
+- Some periods also have 'UA_DOB-PL' and 'PL-UA_DOB' (a Ukrainian section); net_flows adds them to UA, as the PSE report page does.
+- The sum of all rows follows the exchange balance swm_p + swm_np of his-wlk-cal (correlation 0.99998, 1-7 Nov 2026).
 - Flows exclude local exchange over 110 kV lines (comment on the report page).
 
 #### gen-jw
 
-**Production of generating units** (Generacja mocy jednostek wytwórczych). Generation per unit; units with installed capacity of 100 MW or more and an EIC code.
+**Production of generating units** (Generacja mocy jednostek wytwórczych). Generation and consumption per unit; units with installed capacity of 100 MW or more and an EIC code.
 
 - Resolution: 15min; rows stamped with the interval end (`dtime_utc`)
 - Available from business date 2024-06-14
 - Revision window: 60 days
+- Republication check: one request per cached month
 - Several rows per interval, keyed by `resource_code`, `operating_mode`
 - PSE page: <https://raporty.pse.pl/report/gen-jw>
 
@@ -368,7 +387,9 @@ Checked on 2026-10-26 against the [OpenAPI description](https://api.raporty.pse.
 | `operating_mode` | Operating mode (Polish label) | text |
 | `power_plant` | Power plant | text |
 | `operating_mode_eng` | Operating mode (English label) | text |
-| `value` | Generation of the unit | MW (unverified) |
+| `value` | Generation of the unit (>= 0); consumption (operating_mode 'Pobór', e.g. pumping) is negative | MW (unverified) |
+
+- Rows with operating_mode 'Pobór' ('Consumption') carry negative values (768 of 10,560 rows on 2026-11-05).
 
 ## Legacy export (until 2024-06-13)
 
