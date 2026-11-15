@@ -13,7 +13,7 @@ abstract: >-
 authors:
   - family-names: "Waleszczyński"
     given-names: "Konrad"
-version: 0.2.0
+version: 0.2.1
 doi: 10.5281/zenodo.23833548
 identifiers:
   - type: doi
@@ -22,7 +22,7 @@ identifiers:
   - type: doi
     value: 10.5281/zenodo.23833549
     description: "Version 0.2.0"
-date-released: "2026-10-31"
+date-released: "2026-11-15"
 license: MIT
 repository-code: "https://github.com/kwwaleszczynski-del/pse-opendata"
 url: "https://kwwaleszczynski-del.github.io/pse-opendata/"

@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [semantic versioning](https://semver.org/).
 
-## [0.2.1] - unreleased
+## [0.2.1] - 2026-11-15
 
 Fixes from an independent review. Default behaviour is unchanged except where noted under Changed.
 
@@ -70,5 +70,6 @@ First version, published on GitHub only (commit 8b01ec8), not on PyPI.
 - Offline tests on recorded PSE responses, optional live tests, ruff, mypy, GitHub Actions for Python 3.11-3.13,
   MkDocs documentation and a release workflow for PyPI Trusted Publishing (disabled).
 
+[0.2.1]: https://github.com/kwwaleszczynski-del/pse-opendata/releases/tag/v0.2.1
 [0.2.0]: https://github.com/kwwaleszczynski-del/pse-opendata/releases/tag/v0.2.0
 [0.1.0]: https://github.com/kwwaleszczynski-del/pse-opendata/tree/8b01ec882b6f3af9c9ea91308293dda64108d705
