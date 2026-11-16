@@ -153,7 +153,7 @@ mkdocs build --strict
 
 If you use the package in published work, please cite it through its Zenodo DOI,
 [10.5281/zenodo.23833548](https://doi.org/10.5281/zenodo.23833548) (all versions; each release also has its own DOI,
-e.g. 0.2.0: [10.5281/zenodo.23833549](https://doi.org/10.5281/zenodo.23833549)). See also
+e.g. 0.2.1: [10.5281/zenodo.24274548](https://doi.org/10.5281/zenodo.24274548)). See also
 [`CITATION.cff`](CITATION.cff).
 
 ## License

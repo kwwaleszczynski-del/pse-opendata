@@ -20,8 +20,8 @@ identifiers:
     value: 10.5281/zenodo.23833548
     description: "All versions (concept DOI)"
   - type: doi
-    value: 10.5281/zenodo.23833549
-    description: "Version 0.2.0"
+    value: 10.5281/zenodo.24274548
+    description: "Version 0.2.1"
 date-released: "2026-11-15"
 license: MIT
 repository-code: "https://github.com/kwwaleszczynski-del/pse-opendata"
